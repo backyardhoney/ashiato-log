@@ -724,6 +724,11 @@ input[type=range]{width:100%}
 <div class="mute" style="margin-top:10px">同じ経路の判定(重なり具合): <b id="thv">85</b>%以上で1本にまとめる</div>
 <input type="range" id="th" min="50" max="99" value="85">
 
+<h2>経路の見た目</h2>
+<label><input type="radio" name="sty" value="auto" checked>自動(拡大すると足跡・タイヤ跡)</label>
+<label><input type="radio" name="sty" value="fp">いつも足跡・タイヤ跡</label>
+<label><input type="radio" name="sty" value="line">いつも線</label>
+<div class="mute" style="margin-top:2px">ランは足跡、バイクはタイヤ跡で表示します。</div>
 <h2>背景地図</h2>
 <select id="tile" style="width:100%"><option value="pale">国土地理院 淡色地図</option><option value="std">国土地理院 標準地図</option><option value="photo">国土地理院 航空写真</option><option value="none">なし</option></select>
 <div class="mute" style="margin-top:6px">背景の濃さ</div>
@@ -841,7 +846,7 @@ if(typeof module!=='undefined')module.exports={parseFit};
 const $=id=>document.getElementById(id);
 const CK=a=>Math.round(a/0.0003);
 const store={get(k,d){try{const v=localStorage.getItem('gmap.'+k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('gmap.'+k,JSON.stringify(v))}catch(e){}}};
-const st={items:[],pool:[],kept:[],from:null,to:null,home:store.get('home',null),radius:store.get('radius',500),hide:store.get('hide',true),jit:store.get('jit2',100),thr:store.get('thr',85),op:store.get('op',45),tile:store.get('tile','pale'),circle:store.get('circle',false),homeAuto:false};
+const st={items:[],pool:[],kept:[],from:null,to:null,home:store.get('home',null),radius:store.get('radius',500),hide:store.get('hide',true),jit:store.get('jit2',100),thr:store.get('thr',85),op:store.get('op',45),tile:store.get('tile','pale'),circle:store.get('circle',false),sty:store.get('sty','auto'),homeAuto:false};
 const css=getComputedStyle(document.documentElement);
 const col={run:css.getPropertyValue('--run').trim(),bike:css.getPropertyValue('--bike').trim()};
 const KIND={1:'run',2:'bike'},LABEL={run:'ランニング',bike:'バイク'};
@@ -960,8 +965,73 @@ function showInfo(it){
   e.style.top=nearBR?'12px':'auto';e.style.bottom=nearBR?'auto':'34px';
 }
 function hideInfo(){$('info').hidden=true}
-function highlight(l){lines.forEach(x=>x.setStyle({opacity:.15,weight:2}));l.setStyle({opacity:1,weight:6});l.bringToFront()}
-function reset(){lines.forEach(x=>x.setStyle({opacity:.85,weight:3}));hideInfo()}
+// 足跡・タイヤ跡の表示。自動のときは、ズーム16以上で足跡に切り替わる。
+let hlLine=null;
+function fpActive(){return st.sty==='fp'||(st.sty==='auto'&&map.getZoom()>=16)}
+function applyStyle(){
+  const fp=fpActive();
+  lines.forEach(x=>{
+    if(fp)x.setStyle({opacity:0,weight:16});
+    else if(x===hlLine)x.setStyle({opacity:1,weight:6});
+    else x.setStyle({opacity:hlLine?.15:.85,weight:hlLine?2:3});
+  });
+  fpRedraw();
+}
+function highlight(l){hlLine=l;applyStyle();if(!fpActive())l.bringToFront()}
+function reset(){hlLine=null;applyStyle();hideInfo()}
+const fpCv=document.createElement('canvas');
+fpCv.style.cssText='position:absolute;left:0;top:0;pointer-events:none;z-index:450';
+map.getContainer().appendChild(fpCv);
+let fpRaf=0;
+function fpRedraw(){if(fpRaf)return;fpRaf=requestAnimationFrame(()=>{fpRaf=0;fpDraw()})}
+function foot(c,x,y,ang,S,side){
+  // つま先が進行方向(スタート→ゴール)を向く足跡。side: +1=右足, -1=左足
+  c.save();c.translate(x,y);c.rotate(ang);
+  c.beginPath();c.ellipse(S*0.1,0,S*0.24,S*0.19,0,0,6.2832);c.fill();      // 足の前半
+  c.beginPath();c.ellipse(-S*0.3,0,S*0.17,S*0.12,0,0,6.2832);c.fill();     // かかと
+  const ty=[-0.12,-0.04,0.03,0.09,0.14],tx=[0.37,0.41,0.4,0.37,0.33],tr=[0.085,0.06,0.055,0.05,0.045];
+  for(let k=0;k<5;k++){c.beginPath();c.arc(S*tx[k],S*ty[k]*side,S*tr[k],0,6.2832);c.fill()}  // 指
+  c.restore();
+}
+function fpDraw(){
+  const sz=map.getSize(),dpr=window.devicePixelRatio||1;
+  if(fpCv.width!==Math.round(sz.x*dpr)||fpCv.height!==Math.round(sz.y*dpr)){
+    fpCv.width=Math.round(sz.x*dpr);fpCv.height=Math.round(sz.y*dpr);fpCv.style.width=sz.x+'px';fpCv.style.height=sz.y+'px';
+  }
+  const c=fpCv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,sz.x,sz.y);
+  if(!fpActive())return;
+  const z=map.getZoom(),S=z>=16?Math.min(26,8+(z-16)*7):6,step=S*1.3,W=sz.x,H=sz.y;
+  const view=map.getBounds().pad(0.2);
+  for(const l of lines){
+    if(!l._segs||!view.intersects(l.getBounds()))continue;
+    const hl=l===hlLine,a=hlLine?(hl?1:.12):.85;
+    c.globalAlpha=a;c.fillStyle=c.strokeStyle=col[l._k];
+    for(const seg of l._segs){
+      const pts=seg.map(q=>map.latLngToContainerPoint(q));
+      if(l._k==='run'){
+        const sc=hl?1.25:1;let carry=0,side=1;
+        for(let i=1;i<pts.length;i++){
+          const a0=pts[i-1],b0=pts[i],dx=b0.x-a0.x,dy=b0.y-a0.y,len=Math.hypot(dx,dy);
+          if(len<1e-6)continue;
+          const ux=dx/len,uy=dy/len,ang=Math.atan2(dy,dx);let t=step*sc-carry;
+          while(t<=len){
+            const x=a0.x+ux*t,y=a0.y+uy*t;
+            if(x>-S&&x<W+S&&y>-S&&y<H+S)foot(c,x-uy*side*S*0.32*sc,y+ux*side*S*0.32*sc,ang,S*sc,side);
+            side=-side;t+=step*sc;
+          }
+          carry=len-(t-step*sc);
+        }
+      }else{
+        const w=Math.max(2.5,S*0.38)*(hl?1.3:1);
+        c.lineWidth=w;c.lineCap='butt';c.lineJoin='round';c.setLineDash([w*0.7,w*0.5]);
+        c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p.x,p.y):c.moveTo(p.x,p.y));c.stroke();c.setLineDash([]);
+      }
+    }
+  }
+  c.globalAlpha=1;
+}
+map.on('move zoom resize',fpRedraw);
+map.on('zoomend',applyStyle);
 function render(fit){
   routeLayer.clearLayers();lines=[];const cnt={run:0,bike:0},bounds=[];
   const show={run:$('cr').checked,bike:$('cb').checked};
@@ -974,11 +1044,12 @@ function render(fit){
       const l=L.polyline(segs,{color:col[k],weight:3,opacity:.85});
       l.on('mouseover',()=>{highlight(l);showInfo(it)});l.on('mouseout',reset);
       l.on('click',e=>{highlight(l);showInfo(it);L.DomEvent.stopPropagation(e)});
-      lines.push(l);routeLayer.addLayer(l);
+      l._segs=segs;l._k=k;lines.push(l);routeLayer.addLayer(l);
       for(const s of segs)for(const q of s)bounds.push(q);
     }
   }
   $('nr').textContent=cnt.run;$('nb').textContent=cnt.bike;
+  hlLine=null;applyStyle();
   if(fit&&bounds.length)map.fitBounds(bounds,innerWidth<700?{padding:[20,20],paddingTopLeft:[20,150]}:{padding:[30,30],paddingTopLeft:[340,30]});
   drawCircle();
 }
@@ -1116,6 +1187,8 @@ function init(){
   $('setmap').onclick=()=>{pickMode=!pickMode;$('setmap').textContent=pickMode?'地図をクリックしてください(取消はもう一度)':'地図をクリックして指定';map.getContainer().style.cursor=pickMode?'crosshair':''};
   $('clearhome').onclick=()=>{st.home=null;st.homeAuto=false;store.set('home',null);updHome();render(false)};
   $('circ').onchange=e=>{st.circle=e.target.checked;store.set('circle',st.circle);drawCircle()};
+  document.querySelector('input[name=sty][value='+st.sty+']').checked=true;
+  document.querySelectorAll('input[name=sty]').forEach(r=>r.onchange=()=>{st.sty=document.querySelector('input[name=sty]:checked').value;store.set('sty',st.sty);applyStyle()});
   $('min').onclick=()=>{const p=$('panel');p.classList.toggle('min');$('min').textContent=p.classList.contains('min')?'＋':'－'};
   if(location.protocol==='http:'){setInterval(()=>fetch('/ping',{cache:'no-store'}).catch(()=>{}),5000);fetch('/ping',{cache:'no-store'}).catch(()=>{})}
 }

@@ -708,7 +708,7 @@ input[type=range]{width:100%}
 <div id="drop"><div>エクスポートしたデータ(zip)をここにドロップ</div>
 <div class="row" style="justify-content:center;margin-top:8px">
 <button class="primary" id="pick">ファイルを選ぶ</button><button id="pickdir">フォルダを選ぶ</button></div>
-<div class="mute" style="margin-top:6px">走行データはこの端末の中だけで処理し、送信しません。(背景地図の画像だけ、国土地理院から取得します)</div></div>
+<div class="mute" style="margin-top:6px">走行データはこの端末の中だけで処理し、送信しません。(背景地図の画像だけ、国土地理院から取得します。このページを開いた回数だけ、アクセス集計サービスで数えています)</div></div>
 <input id="f1" type="file" accept=".zip,.fit" multiple hidden>
 <input id="f2" type="file" webkitdirectory hidden>
 <div id="prog" hidden><i></i></div>
@@ -758,7 +758,7 @@ input[type=range]{width:100%}
 <div class="mute">経路にカーソルを当てる(スマホはタップ)と、その1本を強調し、詳細を右下のカードに表示します。ホイールで細かく拡大縮小できます。</div>
 <details class="help"><summary>このアプリについて・ライセンス</summary>
 <div class="mute" style="margin-top:6px;line-height:1.6">
-<b>あしあと絵図</b>: 某メーカーのスマートウォッチやサイクルコンピューターに溜まった足あとを、地図の上にまとめて眺めるためのツールです。本気のデータ解析はできません。「この道、何回走ったんだっけ」と、ニヤニヤするための道具です。<br>FIT形式のファイルであれば、ほかのサービスや機器のデータでも使えるかもしれません(動作確認は一部のデータだけなので、うまく表示できないこともあります)。<br>走行データはこの端末の中だけで処理し、作者のサーバーへは送りません(サーバーは持っていません)。ただし背景地図の画像は国土地理院から取得するため、表示している範囲の地図が配信元に伝わります。<br><br>
+<b>あしあと絵図</b>: 某メーカーのスマートウォッチやサイクルコンピューターに溜まった足あとを、地図の上にまとめて眺めるためのツールです。本気のデータ解析はできません。「この道、何回走ったんだっけ」と、ニヤニヤするための道具です。<br>FIT形式のファイルであれば、ほかのサービスや機器のデータでも使えるかもしれません(動作確認は一部のデータだけなので、うまく表示できないこともあります)。<br>走行データはこの端末の中だけで処理し、作者のサーバーへは送りません(サーバーは持っていません)。ただし背景地図の画像は国土地理院から取得するため、表示している範囲の地図が配信元に伝わります。また、このページを開いた回数(訪問数)だけ、アクセス集計サービス GoatCounter(cookieなし)で数えています。走行データや位置情報は含まれません。<br><br>
 本アプリは非公式の個人製作ツールで、どのメーカーとも関係ありません。無保証で提供しており、利用による損害について作者は責任を負いません。<br><br>
 <b>背景地図</b>: <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>(地理院タイル)を表示しています。出典: 国土地理院。<br><br>
 <b>使用しているソフトウェア</b><br>
@@ -1265,5 +1265,5 @@ function init(){
   if(location.protocol==='http:'){setInterval(()=>fetch('/ping',{cache:'no-store'}).catch(()=>{}),5000);fetch('/ping',{cache:'no-store'}).catch(()=>{})}
 }
 init();
-<script data-goatcounter="https://ashiato-ezu.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>	
-</script></body></html>
+</script><script data-goatcounter="https://ashiato-ezu.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
+</body></html>

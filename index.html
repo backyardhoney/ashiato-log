@@ -1238,6 +1238,7 @@ function init(){
   document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>quick(b.dataset.q));
   $('th').value=st.thr;$('thv').textContent=st.thr;$('op').value=st.op;$('tile').value=st.tile;$('circ').checked=st.circle;
   $('rad').value=st.radius;$('radr').value=Math.min(5000,st.radius);
+  for(const [i,k] of [['cr','show_run'],['cb','show_bike'],['cw','show_walk']])$(i).checked=store.get(k,true); // 表示する種類も覚える
   document.querySelector('input[name=hm][value='+(st.hide?'hide':'show')+']').checked=true;
   setTile(st.tile);setOp();updHome();
   $('pick').onclick=()=>$('f1').click();$('pickdir').onclick=()=>$('f2').click();
@@ -1247,7 +1248,7 @@ function init(){
   ['dragenter','dragover'].forEach(t=>window.addEventListener(t,e=>{e.preventDefault();d.classList.add('over')}));
   ['dragleave','drop'].forEach(t=>window.addEventListener(t,e=>{e.preventDefault();d.classList.remove('over')}));
   window.addEventListener('drop',e=>{const fs=[...(e.dataTransfer?e.dataTransfer.files:[])];if(fs.length)readAll(fs)});
-  $('cr').onchange=()=>render(false);$('cb').onchange=()=>render(false);$('cw').onchange=()=>render(false);
+  for(const [i,k] of [['cr','show_run'],['cb','show_bike'],['cw','show_walk']])$(i).onchange=()=>{store.set(k,$(i).checked);render(false)};
   $('th').oninput=e=>{st.thr=+e.target.value;$('thv').textContent=st.thr;store.set('thr',st.thr);dedupe();render(false)};
   $('op').oninput=e=>{st.op=+e.target.value;store.set('op',st.op);setOp()};
   $('tile').onchange=e=>{st.tile=e.target.value;store.set('tile',st.tile);setTile(st.tile)};

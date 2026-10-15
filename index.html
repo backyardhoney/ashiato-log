@@ -971,12 +971,14 @@ function hideInfo(){$('info').hidden=true}
 // 足跡・タイヤ跡の表示。自動のときは、ズーム16以上で足跡に切り替わる。
 let hlLine=null;
 function fpActive(){return st.sty==='fp'||(st.sty==='auto'&&map.getZoom()>=16)}
+// 線の太さは、引いた(縮小した)ときは細く、拡大すると2.5pxまで太くする
+function lineW(){const z=map.getZoom();return Math.min(2.5,Math.max(0.5,0.35*z-2))}
 function applyStyle(){
-  const fp=fpActive();
+  const fp=fpActive(),bw=lineW();
   lines.forEach(x=>{
     if(fp)x.setStyle({opacity:0,weight:16});
-    else if(x===hlLine)x.setStyle({opacity:1,weight:6});
-    else x.setStyle({opacity:hlLine?.15:.85,weight:hlLine?2:3});
+    else if(x===hlLine)x.setStyle({opacity:1,weight:Math.max(3,bw*2)});
+    else x.setStyle({opacity:hlLine?.15:.85,weight:hlLine?Math.max(1,bw*.67):bw});
   });
   fpRedraw();
 }
@@ -1016,7 +1018,7 @@ function fpDraw(){
     for(const seg of l._segs){
       const pts=seg.map(q=>map.latLngToContainerPoint(q));
       if(l._k==='run'||l._k==='walk'){const wk=l._k==='walk',S2=wk?S*0.85:S,st2=wk?step*0.85:step;
-        const sc=hl?1.25:1;let carry=0,side=1;
+        const sc=hl?1.65:1;let carry=0,side=1;
         for(let i=1;i<pts.length;i++){
           const a0=pts[i-1],b0=pts[i],dx=b0.x-a0.x,dy=b0.y-a0.y,len=Math.hypot(dx,dy);
           if(len<1e-6)continue;
@@ -1030,7 +1032,7 @@ function fpDraw(){
         }
       }else{
         // 自転車のタイヤ跡(ロードタイヤ): 外側の縁2本・中央の縦溝2本・その間の細かい斜めの溝
-        const sc=hl?1.3:1,w=Math.max(7,S*0.72)*sc,n=pts.length,tick=w*0.42;
+        const sc=hl?1.8:1,w=Math.max(7,S*0.72)*sc,n=pts.length,tick=w*0.42;
         const nx=[],ny=[];
         for(let i=0;i<n;i++){const p0=pts[Math.max(0,i-1)],p1=pts[Math.min(n-1,i+1)],dx=p1.x-p0.x,dy=p1.y-p0.y,L=Math.hypot(dx,dy)||1;nx.push(-dy/L);ny.push(dx/L)}
         c.lineCap='round';c.lineJoin='round';
@@ -1112,7 +1114,7 @@ function render(fit){
       if(it.k!==k)continue;
       const segs=trim(it.p,it);if(!segs.length)continue;
       cnt[k]++;
-      const l=L.polyline(segs,{color:col[k],weight:3,opacity:.85});
+      const l=L.polyline(segs,{color:col[k],weight:lineW(),opacity:.85});
       l.on('mouseover',()=>{highlight(l);showInfo(it)});l.on('mouseout',reset);
       l.on('click',e=>{highlight(l);showInfo(it);L.DomEvent.stopPropagation(e)});
       l._segs=segs;l._k=k;l._it=it;lines.push(l);routeLayer.addLayer(l);

@@ -798,7 +798,7 @@ function parseFit(buf){
   const hs=dv.getUint8(0);
   if(String.fromCharCode(dv.getUint8(8),dv.getUint8(9),dv.getUint8(10),dv.getUint8(11))!=='.FIT') return null;
   const end=Math.min(buf.byteLength,hs+dv.getUint32(4,true));
-  const defs={};let off=hs,sport=null,sSport=null,start=null,firstTs=null;const S={};const pts=[];
+  const defs={};let off=hs,sport=null,sSport=null,start=null,firstTs=null;const S={};const pts=[];const tms=[];
   try{
   while(off<end){
     const h=dv.getUint8(off++);let local,isDef=false,dev=false;
@@ -814,14 +814,14 @@ function parseFit(buf){
     }else{
       const d=defs[local];if(!d)return null;
       if(d.gm===20){
-        let la=null,lo=null;
+        let la=null,lo=null,tsv=null;
         for(const [n,sz,o] of d.fields){
           if(sz!==4)continue;
           if(n===0)la=dv.getInt32(off+o,d.le);
           else if(n===1)lo=dv.getInt32(off+o,d.le);
-          else if(n===253&&firstTs===null)firstTs=dv.getUint32(off+o,d.le);
+          else if(n===253){const v=dv.getUint32(off+o,d.le);if(firstTs===null)firstTs=v;tsv=v}
         }
-        if(la!==null&&lo!==null&&la!==0x7FFFFFFF&&lo!==0x7FFFFFFF)pts.push([la*180/2147483648,lo*180/2147483648]);
+        if(la!==null&&lo!==null&&la!==0x7FFFFFFF&&lo!==0x7FFFFFFF){pts.push([la*180/2147483648,lo*180/2147483648]);tms.push(tsv)}
       }else if(d.gm===18){
         for(const [n,sz,o] of d.fields){
           const g=sz===1?dv.getUint8(off+o):sz===2?dv.getUint16(off+o,d.le):sz===4?dv.getUint32(off+o,d.le):null;
@@ -839,7 +839,7 @@ function parseFit(buf){
   }catch(e){}
   const sp=sSport!==null?sSport:sport;
   const t=start!==null?start:firstTs;
-  return {sport:sp,start:t===null?null:(t+631065600),pts,S};
+  return {sport:sp,start:t===null?null:(t+631065600),pts,tms,S};
 }
 if(typeof module!=='undefined')module.exports={parseFit};
 
@@ -877,16 +877,18 @@ function thin(pts,step){const o=[pts[0]];let l=pts[0];for(let i=1;i<pts.length;i
 function lenKm(p){let s=0;for(let i=1;i<p.length;i++)s+=distM(p[i-1][0],p[i-1][1],p[i][0],p[i][1]);return s/1000}
 function dstr(unix){if(unix==null)return '日付不明';const d=new Date(unix*1000);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 
+function thinIdx(pts,step){const o=[0];let l=pts[0];for(let i=1;i<pts.length;i++){const q=pts[i];if(distM(l[0],l[1],q[0],q[1])>=step){o.push(i);l=q}}if(o[o.length-1]!==pts.length-1)o.push(pts.length-1);return o}
 function addActivity(r){
   const k=KIND[r.sport];if(!k||!r.pts||r.pts.length<10)return;
   const ends=[r.pts[0],r.pts[r.pts.length-1]];
-  const p=thin(r.pts,15);const km=lenKm(p);if(km<0.3)return;
+  const th=thinIdx(r.pts,15);const p=th.map(i=>r.pts[i]);const km=lenKm(p);if(km<0.3)return;
+  let tm=null;if(r.tms&&r.tms.length===r.pts.length&&r.tms.every(x=>x!==null)){const t0=r.tms[0];tm=th.map(i=>r.tms[i]-t0)}
   const cells=new Set();for(const q of p)cells.add(CK(q[0])*1000000+CK(q[1]));
   const S=r.S||{},v=x=>S[x]===undefined?null:S[x];
   const dist=v(9)!==null?v(9)/100000:km,time=v(8)!==null?v(8)/1000:null;
   let spd=v(124)!==null?v(124)/1000:(v(14)!==null?v(14)/1000:null);
   if(spd===null&&time)spd=dist*1000/time;
-  st.items.push({u1:rnd(),u2:rnd(),k,t:r.start,el:v(7)!==null?v(7)/1000:null,date:dstr(r.start),km,dist,time,spd,hr:v(16),hrMax:v(17),cad:v(18),pw:v(20),asc:v(22),cal:v(11),p,cells,ends,n:1});
+  st.items.push({u1:rnd(),u2:rnd(),k,t:r.start,el:v(7)!==null?v(7)/1000:null,date:dstr(r.start),km,dist,time,spd,hr:v(16),hrMax:v(17),cad:v(18),pw:v(20),asc:v(22),cal:v(11),p,cells,ends,tm,n:1});
 }
 function hms(s){s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h+':'+String(m).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
 function tip(it){
@@ -914,12 +916,12 @@ function summary(){
 }
 function dedupe(){
   st.pool=st.items.filter(inRange);
-  for(const it of st.pool)it.n=1;
+  for(const it of st.pool){it.n=1;it._grp=null}
   const kept=[],cov={run:new Map(),bike:new Map(),walk:new Map()};
   for(const it of st.pool.slice().sort((a,b)=>b.km-a.km)){
     const c=cov[it.k];let hit=0;const votes=new Map();
     for(const x of it.cells){const o=c.get(x);if(o){hit++;votes.set(o,(votes.get(o)||0)+1)}}
-    if(hit/it.cells.size>=st.thr/100){let best=null,bv=0;for(const [o,n] of votes)if(n>bv){best=o;bv=n}if(best)best.n++;continue}
+    if(hit/it.cells.size>=st.thr/100){let best=null,bv=0;for(const [o,n] of votes)if(n>bv){best=o;bv=n}if(best){best.n++;(best._grp||(best._grp=[])).push(it)}continue}
     kept.push(it);for(const x of it.cells)if(!c.has(x))c.set(x,it);
   }
   st.kept=kept;summary();
@@ -954,7 +956,7 @@ function trim(p,it){
   while(a<b&&v[a]<xs)a++;
   while(b>a&&v[b-1]<xe)b--;
   // 出発側・帰着側の連続した部分だけを消す。途中で隠す範囲を通過しただけの部分は消さない。
-  const seg=p.slice(a,b);
+  const seg=p.slice(a,b);seg._a=a;
   return seg.length>1?[seg]:[];
 }
 // ---------- 描画 ----------
@@ -1090,7 +1092,7 @@ function demoEnd(){
 }
 function demo(){
   if(!lines.length)return;
-  const id=++demoRun,tz=Math.min(18,Math.max(map.getZoom(),17.5)),tc=map.getCenter(),z0=7.2,c0=L.latLng(34.6,134.3);
+  const id=++demoRun,tz=map.getZoom(),tc=map.getCenter(),z0=tz<8.7?Math.max(4,tz-2):7.2,c0=L.latLng(34.6,134.3); // 終点は、ボタンを押したときの縮尺
   reset();curEl.style.display='none';
   const pn=$('panel');pn.classList.add('min');$('min').textContent='＋';
   const T=7000,t0=performance.now(),ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
@@ -1268,5 +1270,46 @@ function init(){
   if(location.protocol==='http:'){setInterval(()=>fetch('/ping',{cache:'no-store'}).catch(()=>{}),5000);fetch('/ping',{cache:'no-store'}).catch(()=>{})}
 }
 init();
+// ---------- 共有用の書き出し(自宅周辺を削除済み) ----------
+(function(){
+  const r5=x=>Math.round(x*1e5)/1e5;
+  function exportShare(){
+    const m=$('msg');
+    const mine=st.items.filter(it=>!it.owner||it.owner==='自分');
+    if(!mine.length){m.textContent='先にデータを読み込んでください。';return}
+    if(!st.hide||!st.home||!(st.radius>0)){m.textContent='共有用の書き出しには、「自宅周辺を隠す」をオンにして、自宅と半径を設定してください。';return}
+    const items=[];
+    for(const it of mine){
+      const segs=trim(it.p,it);if(!segs.length||segs[0].length<10)continue;const p=segs[0];
+      const a0=segs[0]._a||0;items.push({k:it.k,t:it.t,el:it.el,date:it.date,km:+lenKm(p).toFixed(3),dist:+it.dist.toFixed(3),time:it.time,spd:it.spd,hr:it.hr,hrMax:it.hrMax,cad:it.cad,pw:it.pw,asc:it.asc,cal:it.cal,p:p.map(q=>[r5(q[0]),r5(q[1])]),tm:(it.tm&&it.tm.length===it.p.length)?it.tm.slice(a0,a0+p.length):undefined});
+    }
+    if(!items.length){m.textContent='書き出せる記録がありませんでした。';return}
+    const b=new Blob([JSON.stringify({kind:'ashiato-share',version:1,items})],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(b);
+    const d=new Date();a.download='ashiato_share_'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'.json';
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    m.textContent='共有用ファイルを書き出しました('+items.length+' 件)。自宅周辺は削除済みで、記録の名前は含みません。';
+  }
+  const row=$('reroll').parentElement;
+  row.insertAdjacentHTML('afterend','<div class="row" style="margin-top:8px"><button id="shareexp">共有用に書き出す</button></div>'+
+    '<div class="mute">友だちに渡すためのファイルを作ります。自宅周辺を、いま設定している半径とばらつきで削除したデータだけが入ります。</div>');
+  $('shareexp').onclick=exportShare;
+})();
+
+// ---------- 自宅を隠していないときの警告(画像や動画に写る) ----------
+(function(){
+  const w=document.createElement('div');w.id='hidewarn';
+  w.style.cssText='position:absolute;z-index:1100;top:10px;left:50%;transform:translateX(-50%);max-width:calc(100vw - 24px);background:#c92a2a;color:#fff;font-weight:600;font-size:13px;line-height:1.4;padding:6px 12px;border-radius:8px;display:none;pointer-events:none;text-align:center';
+  document.body.appendChild(w);
+  function upd(){
+    let t='';
+    if(!st.hide)t='⚠ 自宅周辺を隠していません。画像や動画を公開する前に確認してください';
+    else if(!st.home&&st.items.length)t='⚠ 自宅が未設定のため、自宅周辺は隠れていません';
+    w.textContent=t;w.style.display=t?'block':'none';
+  }
+  const _u=updHome;updHome=function(){_u();upd()};
+  upd();
+})();
+
 </script><script data-goatcounter="https://ashiato-ezu.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body></html>

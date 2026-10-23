@@ -1311,5 +1311,53 @@ init();
   upd();
 })();
 
+// ---------- 夜の地図: 経路の周りだけ、ぼんやり明るく見せる(無料版) ----------
+(function(){
+  const stl=document.createElement('style');
+  stl.textContent='body.nightmap #map{background:#05080c}';
+  document.head.appendChild(stl);
+  const op=document.getElementById('op');if(!op)return;
+  const row=document.createElement('div');row.id='nightrow';
+  row.innerHTML='<label style="display:block;margin-top:8px"><input type="checkbox" id="nightck">夜の地図(経路の周りだけ明るく)</label>'+
+   '<div class="mute" style="margin-top:2px">地図を暗くして、走った道の周りだけをぼんやり明るく見せます。画像に保存するときにも使えます。</div>';
+  op.insertAdjacentElement('afterend',row);
+  const ck=document.getElementById('nightck');
+  const redraw=()=>{const r=map._renderer;if(!r)return;try{r._redrawBounds=null;r._clear();r._draw()}catch(e){}};
+  ck.onchange=()=>{document.body.classList.toggle('nightmap',ck.checked);redraw()};
+  const _drw=L.Canvas.prototype._draw;
+  L.Canvas.prototype._maskNight=function(){
+    const ctx=this._ctx,bb=this._redrawBounds||this._bounds;if(!ctx||!bb)return;
+    const s=bb.getSize(),Q=4,P=160,ox=bb.min.x-P,oy=bb.min.y-P;
+    const sw=Math.max(2,Math.ceil((s.x+2*P)/Q)),sh=Math.max(2,Math.ceil((s.y+2*P)/Q));
+    ctx.save();ctx.beginPath();ctx.rect(bb.min.x,bb.min.y,s.x,s.y);ctx.clip();
+    ctx.globalCompositeOperation='source-over';ctx.fillStyle='rgba(4,7,11,.74)';ctx.fillRect(bb.min.x,bb.min.y,s.x,s.y);
+    // 経路の周りの「明るさ」を、1/4の大きさの紙に描いてぼかし、引き伸ばして穴としてあける(縁がやわらかくなる)
+    const A=this._n1||(this._n1=document.createElement('canvas')),B=this._n2||(this._n2=document.createElement('canvas'));
+    if(A.width!==sw||A.height!==sh){A.width=B.width=sw;A.height=B.height=sh}
+    const a=A.getContext('2d');a.clearRect(0,0,sw,sh);a.lineJoin='round';a.lineCap='round';a.strokeStyle='#fff';
+    const pad=L.bounds(bb.min.subtract([P,P]),bb.max.add([P,P]));let any=false;
+    for(let o=this._drawFirst;o;o=o.next){
+      const l=o.layer;if(!l._parts||!l._parts.length||!l.options||l.options.opacity===0)continue;
+      if(l._pxBounds&&!L.bounds(l._pxBounds.min.subtract([150,150]),l._pxBounds.max.add([150,150])).intersects(pad))continue;
+      any=true;
+      for(const [w,al] of [[170,.12],[120,.16],[80,.2],[44,.26],[22,.34]]){
+        a.globalAlpha=al;a.lineWidth=w/Q;a.beginPath();
+        for(const ring of l._parts)for(let m=0;m<ring.length;m++)a[m?'lineTo':'moveTo']((ring[m].x-ox)/Q,(ring[m].y-oy)/Q);
+        a.stroke();
+      }
+    }
+    if(any){
+      const b=B.getContext('2d');b.clearRect(0,0,sw,sh);b.filter='blur(9px)';b.drawImage(A,0,0);b.filter='none';
+      ctx.globalCompositeOperation='destination-out';ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+      ctx.drawImage(B,0,0,sw,sh,ox,oy,sw*Q,sh*Q);
+    }
+    ctx.restore();
+  };
+  L.Canvas.prototype._draw=function(){
+    if(document.body.classList.contains('nightmap')&&!window.__paidGlow)this._maskNight();
+    _drw.call(this);
+  };
+})();
+
 </script><script data-goatcounter="https://ashiato-ezu.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body></html>

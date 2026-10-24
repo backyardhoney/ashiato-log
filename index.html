@@ -1337,7 +1337,7 @@ init();
     const a=A.getContext('2d');a.clearRect(0,0,sw,sh);a.lineJoin='round';a.lineCap='round';a.strokeStyle='#fff';
     const pad=L.bounds(bb.min.subtract([P,P]),bb.max.add([P,P]));let any=false;
     for(let o=this._drawFirst;o;o=o.next){
-      const l=o.layer;if(!l._parts||!l._parts.length||!l.options||l.options.opacity===0)continue;
+      const l=o.layer;if(!l._parts||!l._parts.length||!l.options)continue;
       if(l._pxBounds&&!L.bounds(l._pxBounds.min.subtract([150,150]),l._pxBounds.max.add([150,150])).intersects(pad))continue;
       any=true;
       for(const [w,al] of [[170,.12],[120,.16],[80,.2],[44,.26],[22,.34]]){
@@ -1412,6 +1412,7 @@ init();
       await Promise.all(jobs);
       // 経路(夜の地図のときは、暗さと明るさも含む)
       for(const cn of map.getPane('overlayPane').querySelectorAll('canvas')){const r=cn.getBoundingClientRect();c.drawImage(cn,(r.left-R.left)*S,(r.top-R.top)*S,r.width*S,r.height*S)}
+      if(typeof fpCv!=='undefined'&&fpCv.width>0&&fpCv.height>0){const r=fpCv.getBoundingClientRect();c.drawImage(fpCv,(r.left-R.left)*S,(r.top-R.top)*S,r.width*S,r.height*S)} // 足跡の表示(拡大したとき)
       // 出典と、さりげないロゴ
       c.save();c.font='600 '+Math.round(11*S)+'px sans-serif';c.textBaseline='alphabetic';
       c.shadowColor=night?'rgba(0,0,0,.9)':'rgba(255,255,255,.95)';c.shadowBlur=3*S;c.fillStyle=night?'rgba(255,255,255,.8)':'rgba(40,40,40,.85)';

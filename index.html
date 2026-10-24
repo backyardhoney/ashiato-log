@@ -1319,7 +1319,7 @@ init();
   const op=document.getElementById('op');if(!op)return;
   const row=document.createElement('div');row.id='nightrow';
   row.innerHTML='<label style="display:block;margin-top:8px"><input type="checkbox" id="nightck">夜の地図(経路の周りだけ明るく)</label>'+
-   '<div class="mute" style="margin-top:2px">地図を暗くして、走った道の周りだけをぼんやり明るく見せます。画像に保存するときにも使えます。</div>';
+   '<div class="mute" style="margin-top:2px">地図を暗くして、走った道の周りだけをぼんやり明るく見せます。</div>';
   op.insertAdjacentElement('afterend',row);
   const ck=document.getElementById('nightck');
   const redraw=()=>{const r=map._renderer;if(!r)return;try{r._redrawBounds=null;r._clear();r._draw()}catch(e){}};

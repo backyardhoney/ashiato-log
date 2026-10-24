@@ -1326,7 +1326,10 @@ init();
   ck.onchange=()=>{document.body.classList.toggle('nightmap',ck.checked);redraw();if(typeof fpRedraw==='function')fpRedraw()};
   const _drw=L.Canvas.prototype._draw;
   L.Canvas.prototype._maskNight=function(){
-    const ctx=this._ctx,bb=this._redrawBounds||this._bounds;if(!ctx||!bb)return;
+    const ctx=this._ctx;if(!ctx||!this._bounds)return;
+    let bb=this._bounds;if(this._redrawBounds){ // 描き直す範囲が画面より大きくならないよう、画面の中に収める
+      const rb=this._redrawBounds,x0=Math.max(rb.min.x,bb.min.x),y0=Math.max(rb.min.y,bb.min.y),x1=Math.min(rb.max.x,bb.max.x),y1=Math.min(rb.max.y,bb.max.y);
+      if(x1<=x0||y1<=y0)return;bb=L.bounds(L.point(x0,y0),L.point(x1,y1));}
     const s=bb.getSize(),Q=4,P=160,ox=bb.min.x-P,oy=bb.min.y-P;
     const sw=Math.max(2,Math.ceil((s.x+2*P)/Q)),sh=Math.max(2,Math.ceil((s.y+2*P)/Q));
     ctx.save();ctx.beginPath();ctx.rect(bb.min.x,bb.min.y,s.x,s.y);ctx.clip();
@@ -1340,14 +1343,21 @@ init();
       const l=o.layer;if(!l._parts||!l._parts.length||!l.options)continue;
       if(l._pxBounds&&!L.bounds(l._pxBounds.min.subtract([150,150]),l._pxBounds.max.add([150,150])).intersects(pad))continue;
       any=true;
-      for(const [w,al] of [[170,.12],[120,.16],[80,.2],[44,.26],[22,.34]]){
+      for(const [w,al] of [[220,.05],[190,.06],[162,.07],[136,.08],[112,.09],[90,.1],[70,.11],[52,.13],[36,.15],[22,.2]]){
         a.globalAlpha=al;a.lineWidth=w/Q;a.beginPath();
         for(const ring of l._parts)for(let m=0;m<ring.length;m++)a[m?'lineTo':'moveTo']((ring[m].x-ox)/Q,(ring[m].y-oy)/Q);
         a.stroke();
       }
     }
     if(any){
-      const b=B.getContext('2d');b.clearRect(0,0,sw,sh);b.filter='blur(9px)';b.drawImage(A,0,0);b.filter='none';
+      // ぼかし: 小さい紙に縮めてから引き伸ばして、段々が見えないようにする(ぼかし機能のないブラウザでも同じ)
+      const S2=this._n3||(this._n3=document.createElement('canvas')),S3=this._n4||(this._n4=document.createElement('canvas'));
+      const w2=Math.max(2,Math.ceil(sw/4)),h2=Math.max(2,Math.ceil(sh/4)),w3=Math.max(2,Math.ceil(sw/2)),h3=Math.max(2,Math.ceil(sh/2));
+      if(S2.width!==w2||S2.height!==h2){S2.width=w2;S2.height=h2}if(S3.width!==w3||S3.height!==h3){S3.width=w3;S3.height=h3}
+      const c2=S2.getContext('2d'),c3=S3.getContext('2d');c2.clearRect(0,0,w2,h2);c2.imageSmoothingEnabled=true;c2.imageSmoothingQuality='high';c2.drawImage(A,0,0,sw,sh,0,0,w2,h2);
+      c3.clearRect(0,0,w3,h3);c3.imageSmoothingEnabled=true;c3.imageSmoothingQuality='high';c3.drawImage(S2,0,0,w2,h2,0,0,w3,h3);
+      const b=B.getContext('2d');b.clearRect(0,0,sw,sh);b.imageSmoothingEnabled=true;b.imageSmoothingQuality='high';
+      if('filter' in b)b.filter='blur(6px)';b.drawImage(S3,0,0,w3,h3,0,0,sw,sh);b.filter='none';
       ctx.globalCompositeOperation='destination-out';ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
       ctx.drawImage(B,0,0,sw,sh,ox,oy,sw*Q,sh*Q);
     }

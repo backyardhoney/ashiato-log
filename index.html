@@ -1323,7 +1323,7 @@ init();
   op.insertAdjacentElement('afterend',row);
   const ck=document.getElementById('nightck');
   const redraw=()=>{const r=map._renderer;if(!r)return;try{r._redrawBounds=null;r._clear();r._draw()}catch(e){}};
-  ck.onchange=()=>{document.body.classList.toggle('nightmap',ck.checked);redraw()};
+  ck.onchange=()=>{document.body.classList.toggle('nightmap',ck.checked);redraw();if(typeof fpRedraw==='function')fpRedraw()};
   const _drw=L.Canvas.prototype._draw;
   L.Canvas.prototype._maskNight=function(){
     const ctx=this._ctx,bb=this._redrawBounds||this._bounds;if(!ctx||!bb)return;
@@ -1378,6 +1378,21 @@ init();
     _drw.call(this);
     if(nm)this._glowNight();
   };
+  // 拡大して足跡の表示になったときも、足跡の周りをほんのり光らせる
+  if(typeof fpDraw==='function'){
+    const _fd=fpDraw;
+    fpDraw=function(){
+      _fd.apply(this,arguments);
+      if(!document.body.classList.contains('nightmap')||window.__paidGlow||!fpCv.width)return;
+      try{
+        const cx=fpCv.getContext('2d'),t=document.createElement('canvas');t.width=fpCv.width;t.height=fpCv.height;t.getContext('2d').drawImage(fpCv,0,0);
+        cx.save();cx.setTransform(1,0,0,1,0,0);cx.globalCompositeOperation='destination-over';
+        const k=fpCv.width/(fpCv.clientWidth||fpCv.width);cx.shadowColor='rgba(255,205,140,.95)';
+        for(const b of [28,12]){cx.shadowBlur=b*k;cx.drawImage(t,0,0)}
+        cx.restore();
+      }catch(e){}
+    };
+  }
 })();
 
 // ---------- 画像の書き出し(ロゴ入り・1枚)(無料版) ----------

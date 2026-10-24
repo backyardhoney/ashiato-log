@@ -1418,7 +1418,7 @@ init();
       c.fillText('地理院タイル(国土地理院)',10*S,H-10*S);c.restore();
       const lg=logoSrc&&await loadImg(logoSrc,false);
       if(lg){
-        const lw=Math.min(W*.3,240*S),lh=lw*lg.naturalHeight/lg.naturalWidth,pad=8*S,x=W-lw-18*S,y=H-lh-18*S;
+        const lw=Math.min(W*.42,360*S),lh=lw*lg.naturalHeight/lg.naturalWidth,pad=10*S,x=W-lw-24*S,y=H-lh-110*S;
         c.save();c.fillStyle=night?'rgba(5,8,12,.55)':'rgba(255,255,255,.72)';
         const rr=(a,b,w,h,r)=>{c.beginPath();c.moveTo(a+r,b);c.arcTo(a+w,b,a+w,b+h,r);c.arcTo(a+w,b+h,a,b+h,r);c.arcTo(a,b+h,a,b,r);c.arcTo(a,b,a+w,b,r);c.closePath()};
         rr(x-pad,y-pad,lw+2*pad,lh+2*pad,10*S);c.fill();c.drawImage(lg,x,y,lw,lh);c.restore();

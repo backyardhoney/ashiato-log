@@ -1359,5 +1359,66 @@ init();
   };
 })();
 
+// ---------- 画像の書き出し(ロゴ入り・1枚)(無料版) ----------
+(function(){
+  const demo=document.getElementById('demo');if(!demo)return;
+  const row=document.createElement('div');row.className='row';row.style.marginBottom='6px';
+  row.innerHTML='<button id="expimg">🖼 画像を書き出す(ロゴ入り)</button>';
+  demo.parentElement.insertAdjacentElement('afterend',row);
+  const logoSrc=(document.querySelector('#panel h1 img')||{}).src;
+  const loadImg=(src,cors)=>new Promise(res=>{const im=new Image();if(cors)im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>res(null);im.src=src;setTimeout(()=>res(null),9000)});
+  async function exportImage(){
+    const btn=document.getElementById('expimg'),m=$('msg'),old=btn.textContent;
+    btn.disabled=true;btn.textContent='作成中…';
+    try{
+      const box=map.getContainer(),R=box.getBoundingClientRect(),S=Math.min(2,Math.max(1,window.devicePixelRatio||1));
+      const W=Math.round(R.width*S),H=Math.round(R.height*S);
+      const cv=document.createElement('canvas');cv.width=W;cv.height=H;const c=cv.getContext('2d');
+      const night=document.body.classList.contains('nightmap');
+      c.fillStyle=night?'#05080c':(getComputedStyle(box).backgroundColor||'#fff');c.fillRect(0,0,W,H);
+      // 背景の地図(地理院タイル)を、いま見えている位置のまま描く
+      let want=0,got=0;const jobs=[];
+      map.eachLayer(l=>{
+        if(!(l instanceof L.TileLayer)||!l._tiles)return;
+        const op=l.options.opacity==null?1:l.options.opacity;
+        for(const k in l._tiles){
+          const t=l._tiles[k];if(!t||!t.el)continue;const r=t.el.getBoundingClientRect();
+          if(r.right<R.left||r.left>R.right||r.bottom<R.top||r.top>R.bottom)continue;
+          want++;
+          jobs.push(loadImg(l.getTileUrl(t.coords),true).then(im=>{if(!im)return;got++;c.globalAlpha=op;c.drawImage(im,(r.left-R.left)*S,(r.top-R.top)*S,r.width*S,r.height*S);c.globalAlpha=1}));
+        }
+      });
+      await Promise.all(jobs);
+      // 経路(夜の地図のときは、暗さと明るさも含む)
+      for(const cn of map.getPane('overlayPane').querySelectorAll('canvas')){const r=cn.getBoundingClientRect();c.drawImage(cn,(r.left-R.left)*S,(r.top-R.top)*S,r.width*S,r.height*S)}
+      // 出典と、さりげないロゴ
+      c.save();c.font='600 '+Math.round(11*S)+'px sans-serif';c.textBaseline='alphabetic';
+      c.shadowColor=night?'rgba(0,0,0,.9)':'rgba(255,255,255,.95)';c.shadowBlur=3*S;c.fillStyle=night?'rgba(255,255,255,.8)':'rgba(40,40,40,.85)';
+      c.fillText('地理院タイル(国土地理院)',10*S,H-10*S);c.restore();
+      const lg=logoSrc&&await loadImg(logoSrc,false);
+      if(lg){
+        const lw=Math.min(W*.3,240*S),lh=lw*lg.naturalHeight/lg.naturalWidth,pad=8*S,x=W-lw-18*S,y=H-lh-18*S;
+        c.save();c.fillStyle=night?'rgba(5,8,12,.55)':'rgba(255,255,255,.72)';
+        const rr=(a,b,w,h,r)=>{c.beginPath();c.moveTo(a+r,b);c.arcTo(a+w,b,a+w,b+h,r);c.arcTo(a+w,b+h,a,b+h,r);c.arcTo(a,b+h,a,b,r);c.arcTo(a,b,a+w,b,r);c.closePath()};
+        rr(x-pad,y-pad,lw+2*pad,lh+2*pad,10*S);c.fill();c.drawImage(lg,x,y,lw,lh);c.restore();
+      }
+      const blob=await new Promise(res=>cv.toBlob(res,'image/png'));
+      if(!blob)throw new Error('toBlob');
+      const d=new Date(),p=n=>String(n).padStart(2,'0');
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+      a.download='あしあと絵図_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+'.png';
+      document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
+      let t='画像を書き出しました(いま見えている範囲。ロゴ入り)。';
+      if(want&&!got)t+='地図の画像を取得できなかったため、経路とロゴだけの画像です。';
+      if(!st.hide)t+='⚠ 自宅周辺を隠していません。公開前に確認してください。';
+      else if(!st.home&&st.items.length)t+='⚠ 自宅が未設定のため、自宅周辺は隠れていません。';
+      else t+='公開前に、自宅付近が映っていないか確認してください。';
+      m.textContent=t;
+    }catch(e){m.textContent='画像を書き出せませんでした。'}
+    finally{btn.disabled=false;btn.textContent=old}
+  }
+  document.getElementById('expimg').onclick=exportImage;
+})();
+
 </script><script data-goatcounter="https://ashiato-ezu.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body></html>

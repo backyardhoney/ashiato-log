@@ -1510,5 +1510,32 @@ init();
   };
 })();
 
+// ---------- クリックで選択状態(カードと強調を固定)。もう一度クリック/地図の空白/Escで解除 ----------
+(function(){
+  let pin=null;
+  const stl=document.createElement('style');
+  stl.textContent='#info.pinned{border-color:rgba(242,194,48,.75)!important;box-shadow:0 4px 18px rgba(0,0,0,.28),0 0 0 1px rgba(242,194,48,.35)!important}';
+  document.head.appendChild(stl);
+  const ok=()=>pin&&lines.includes(pin);
+  function mark(){$('info').classList.toggle('pinned',!!ok()&&!$('info').hidden)}
+  const _reset=reset;
+  reset=function(){
+    if(ok()){highlight(pin);showInfo(pin._it);mark();return}
+    pin=null;_reset();mark();
+  };
+  function unpin(){pin=null;_reset();mark()}
+  const _fire=L.Evented.prototype.fire;
+  L.Evented.prototype.fire=function(type,data,prop){
+    const r=_fire.call(this,type,data,prop);
+    if(type==='click'&&this._it&&lines.includes(this)){
+      if(pin===this){pin=null;highlight(this);showInfo(this._it);mark()}
+      else{pin=this;highlight(this);showInfo(this._it);mark()}
+    }
+    return r;
+  };
+  map.on('click',()=>{if(pin)unpin()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&pin)unpin()});
+})();
+
 </script><script data-goatcounter="https://ashiato-ezu.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body></html>

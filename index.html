@@ -1330,7 +1330,7 @@ init();
     let bb=this._bounds;if(this._redrawBounds){ // 描き直す範囲が画面より大きくならないよう、画面の中に収める
       const rb=this._redrawBounds,x0=Math.max(rb.min.x,bb.min.x),y0=Math.max(rb.min.y,bb.min.y),x1=Math.min(rb.max.x,bb.max.x),y1=Math.min(rb.max.y,bb.max.y);
       if(x1<=x0||y1<=y0)return;bb=L.bounds(L.point(x0,y0),L.point(x1,y1));}
-    const s=bb.getSize(),Q=4,P=160,ox=bb.min.x-P,oy=bb.min.y-P;
+    const s=bb.getSize(),Q=window.__demoLite?8:4,P=160,ox=bb.min.x-P,oy=bb.min.y-P;
     const sw=Math.max(2,Math.ceil((s.x+2*P)/Q)),sh=Math.max(2,Math.ceil((s.y+2*P)/Q));
     ctx.save();ctx.beginPath();ctx.rect(bb.min.x,bb.min.y,s.x,s.y);ctx.clip();
     ctx.globalCompositeOperation='source-over';ctx.fillStyle='rgba(4,7,11,.74)';ctx.fillRect(bb.min.x,bb.min.y,s.x,s.y);
@@ -1339,15 +1339,16 @@ init();
     if(A.width!==sw||A.height!==sh){A.width=B.width=sw;A.height=B.height=sh}
     const a=A.getContext('2d');a.clearRect(0,0,sw,sh);a.lineJoin='round';a.lineCap='round';a.strokeStyle='#fff';
     const pad=L.bounds(bb.min.subtract([P,P]),bb.max.add([P,P]));let any=false;
+    const P2=new Path2D();const k=1/Q;
     for(let o=this._drawFirst;o;o=o.next){
       const l=o.layer;if(!l._parts||!l._parts.length||!l.options)continue;
       if(l._pxBounds&&!L.bounds(l._pxBounds.min.subtract([150,150]),l._pxBounds.max.add([150,150])).intersects(pad))continue;
       any=true;
-      for(const [w,al] of [[220,.05],[190,.06],[162,.07],[136,.08],[112,.09],[90,.1],[70,.11],[52,.13],[36,.15],[22,.2]]){
-        a.globalAlpha=al;a.lineWidth=w/Q;a.beginPath();
-        for(const ring of l._parts)for(let m=0;m<ring.length;m++)a[m?'lineTo':'moveTo']((ring[m].x-ox)/Q,(ring[m].y-oy)/Q);
-        a.stroke();
-      }
+      for(const ring of l._parts)for(let m=0;m<ring.length;m++)(m?P2.lineTo:P2.moveTo).call(P2,(ring[m].x-ox)*k,(ring[m].y-oy)*k);
+    }
+    // 全部の経路を1本のパスにまとめ、太さごとに1回ずつ描く(本数が多くても軽い)
+    if(any)for(const [w,al] of (window.__demoLite?[[205,.1],[150,.15],[102,.2],[61,.26],[22,.3]]:[[220,.05],[190,.06],[162,.07],[136,.08],[112,.09],[90,.1],[70,.11],[52,.13],[36,.15],[22,.2]])){
+      a.globalAlpha=al;a.lineWidth=w/Q;a.stroke(P2);
     }
     if(any){
       // ぼかし: 小さい紙に縮めてから引き伸ばして、段々が見えないようにする(ぼかし機能のないブラウザでも同じ)
@@ -1547,35 +1548,71 @@ init();
   const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
   // 広い側(zw,cw)と狭い側(zn,cn)の間の位置。v=0で広い側、v=1で狭い側
   function at(zw,cw,zn,cn,v){const z=zw+(zn-zw)*v,w=(1-Math.pow(2,zw-z))/(1-Math.pow(2,zw-zn));return {z,c:L.latLng(cw.lat+(cn.lat-cw.lat)*w,cw.lng+(cn.lng-cw.lng)*w)}}
-  function tileUrls(zw,cw,zn,cn){
+  function tileList(zw,cw,zn,cn){
     if(!tileLayer)return [];
     const S=map.getSize(),seen=new Set(),out=[],mn=tileLayer.options.minZoom||0,mx=tileLayer.options.maxZoom||18;
-    for(let k=0;k<=160;k++){
-      const p=at(zw,cw,zn,cn,k/160);
-      for(const tz of new Set([Math.round(p.z),Math.floor(p.z),Math.ceil(p.z)])){
-        if(tz<mn||tz>mx)continue;
-        const sc=Math.pow(2,tz-p.z),cp=map.project(p.c,tz),hw=S.x/2*sc+256,hh=S.y/2*sc+256;
-        const x0=Math.floor((cp.x-hw)/256),x1=Math.floor((cp.x+hw)/256),y0=Math.floor((cp.y-hh)/256),y1=Math.floor((cp.y+hh)/256);
-        for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){
-          const key=tz+'/'+x+'/'+y;if(seen.has(key)||y<0||y>=Math.pow(2,tz))continue;seen.add(key);
-          out.push(L.Util.template(tileLayer._url,L.extend({s:'',r:''},{x,y,z:tz})));
-        }
+    for(let k=0;k<=240;k++){
+      const p=at(zw,cw,zn,cn,k/240),tz=Math.min(mx,Math.max(mn,Math.round(p.z)));
+      const sc=Math.pow(2,p.z-tz),cp=map.project(p.c,tz),hw=S.x/2*sc+256,hh=S.y/2*sc+256;
+      const x0=Math.floor((cp.x-hw)/256),x1=Math.floor((cp.x+hw)/256),y0=Math.floor((cp.y-hh)/256),y1=Math.floor((cp.y+hh)/256);
+      for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){
+        const key=tz+'/'+x+'/'+y;if(seen.has(key)||y<0||y>=Math.pow(2,tz))continue;seen.add(key);
+        out.push({x,y,z:tz,key,url:L.Util.template(tileLayer._url,{s:'',r:'',x,y,z:tz})});
       }
     }
     return out;
   }
-  function preload(urls,id){
+  const cache=new Map();
+  function preload(list,id){
     return new Promise(res=>{
-      let i=0,done=0,act=0;const N=urls.length;if(!N){res();return}
+      let i=0,done=0,act=0;const N=list.length;if(!N){res();return}
       ov.style.display='block';
       const upd=()=>{ov.innerHTML='地図を先読みしています<br>'+done+' / '+N};upd();
+      const fin=()=>{act--;done++;upd();if(done>=N){ov.style.display='none';res()}else next()};
       const next=()=>{
         if(id!==demoRun){ov.style.display='none';return}
-        while(act<8&&i<N){const im=new Image();act++;im.onload=im.onerror=()=>{act--;done++;upd();if(done>=N){ov.style.display='none';res()}else next()};im.src=urls[i++]}
+        while(act<8&&i<N){
+          const t=list[i++];act++;
+          if(cache.has(t.key)){fin();continue}
+          const im=new Image();
+          im.onload=()=>{(im.decode?im.decode():Promise.resolve()).catch(()=>{}).then(()=>{cache.set(t.key,im);fin()})};
+          im.onerror=()=>{fin()};
+          im.src=t.url;
+        }
       };
       next();
     });
   }
+  // 演出中は、地図を自前のキャンバスに描く(先読みして保持した画像を使うので、速く動かしても白く抜けない)
+  const cv=document.createElement('canvas');
+  cv.style.cssText='position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:0;display:none';
+  map.getContainer().insertBefore(cv,map.getContainer().firstChild);
+  let cvOn=false;
+  function drawBase(){
+    if(!cvOn)return;
+    const S=map.getSize(),dpr=Math.min(window.devicePixelRatio||1,2),W=Math.round(S.x*dpr),H=Math.round(S.y*dpr);
+    if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
+    const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,S.x,S.y);
+    const zz=map.getZoom(),mn=tileLayer?tileLayer.options.minZoom||0:0,mx=tileLayer?tileLayer.options.maxZoom||18:18,tz=Math.min(mx,Math.max(mn,Math.round(zz)));
+    const sc=Math.pow(2,zz-tz),cp=map.project(map.getCenter(),tz),sz=256*sc;
+    const x0=Math.floor((cp.x-S.x/2/sc)/256),x1=Math.floor((cp.x+S.x/2/sc)/256),y0=Math.floor((cp.y-S.y/2/sc)/256),y1=Math.floor((cp.y+S.y/2/sc)/256);
+    for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){
+      const im=cache.get(tz+'/'+x+'/'+y);if(!im)continue;
+      c.drawImage(im,Math.floor(S.x/2+(x*256-cp.x)*sc),Math.floor(S.y/2+(y*256-cp.y)*sc),Math.ceil(sz)+1,Math.ceil(sz)+1);
+    }
+  }
+  function baseOn(){
+    if(cvOn||!tileLayer)return;cvOn=true;cv.style.display='block';cv.style.opacity=(st.op/100);
+    tileLayer.getContainer().style.visibility='hidden';drawBase();
+  }
+  function baseOff(){
+    if(!cvOn)return;
+    const done=()=>{cvOn=false;cv.style.display='none'};
+    if(tileLayer){const tl=tileLayer;tl.getContainer().style.visibility='';
+      let fin=false;const f=()=>{if(fin)return;fin=true;done()};tl.once('load',f);setTimeout(f,1500);tl.redraw()}else done();
+  }
+  map.on('move',drawBase);
+  function liteOff(){baseOff();if(!window.__demoLite)return;window.__demoLite=false;try{const r=map._renderer;r._redrawBounds=null;r._clear();r._draw()}catch(e){}}
   const WIDE_C=L.latLng(34.6,134.3);
   const wideZ=tz=>tz<8.7?Math.max(4,tz-2):7.2;
   if(tileLayer)tileLayer.options.keepBuffer=4;
@@ -1584,15 +1621,16 @@ init();
   d0.onclick=async()=>{
     if(!lines.length)return;
     const id=++demoRun,tz=map.getZoom(),tc=map.getCenter();
-    await preload(tileUrls(wideZ(tz),WIDE_C,tz,tc),id);
+    await preload(tileList(wideZ(tz),WIDE_C,tz,tc),id);
     if(id!==demoRun)return;
-    map.setView(tc,tz,{animate:false});_demo();
+    map.setView(tc,tz,{animate:false});window.__demoLite=true;baseOn();_demo();
+    setTimeout(()=>{if(id===demoRun)liteOff()},1500+7000+900);
   };
   // ズームアウト演出: いまの縮尺から、日本全体へ引いていく(経路とカードは表示したまま)
   btn.onclick=async()=>{
     if(!lines.length)return;
     const id=++demoRun,tz=map.getZoom(),tc=map.getCenter(),zw=wideZ(tz);
-    await preload(tileUrls(zw,WIDE_C,tz,tc),id);
+    await preload(tileList(zw,WIDE_C,tz,tc),id);
     if(id!==demoRun)return;
     reset();curEl.style.display='none';
     const pn=$('panel');pn.classList.add('min');$('min').textContent='＋';
@@ -1601,12 +1639,12 @@ init();
     const T=8000;
     setTimeout(()=>{
       if(id!==demoRun)return;
-      const t0=performance.now();
+      const t0=performance.now();window.__demoLite=true;baseOn();
       const step=now=>{
-        if(id!==demoRun)return;
+        if(id!==demoRun){liteOff();return}
         const u=Math.min(1,(now-t0)/T),p=at(zw,WIDE_C,tz,tc,1-ease(u));
         map.setView(p.c,p.z,{animate:false});
-        if(u<1)requestAnimationFrame(step);
+        if(u<1)requestAnimationFrame(step);else liteOff();
       };
       requestAnimationFrame(step);
     },1500); // 最初の画面(経路とカード)を少し見せる
@@ -1614,6 +1652,5 @@ init();
   // 地図に触れたら演出を止める
   map.on('mousedown touchstart wheel',()=>{if(ov.style.display==='block'){demoRun++;ov.style.display='none'}});
 })();
-
 </script><script data-goatcounter="https://ashiato-ezu.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body></html>

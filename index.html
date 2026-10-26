@@ -1537,5 +1537,83 @@ init();
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&pin)unpin()});
 })();
 
+// ---------- 演出の前に地図を先読み + ズームアウト演出(画面録画用) ----------
+(function(){
+  const btn=document.createElement('button');btn.id='demoOut';btn.textContent='▶ ズームアウト演出(画面録画用)';
+  const d0=$('demo');if(!d0)return;d0.parentNode.appendChild(btn);d0.parentNode.style.flexWrap='wrap';
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1300;background:rgba(14,20,28,.72);color:#fff;padding:14px 18px;border-radius:12px;font-size:14px;display:none;text-align:center;line-height:1.6';
+  document.body.appendChild(ov);
+  const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+  // 広い側(zw,cw)と狭い側(zn,cn)の間の位置。v=0で広い側、v=1で狭い側
+  function at(zw,cw,zn,cn,v){const z=zw+(zn-zw)*v,w=(1-Math.pow(2,zw-z))/(1-Math.pow(2,zw-zn));return {z,c:L.latLng(cw.lat+(cn.lat-cw.lat)*w,cw.lng+(cn.lng-cw.lng)*w)}}
+  function tileUrls(zw,cw,zn,cn){
+    if(!tileLayer)return [];
+    const S=map.getSize(),seen=new Set(),out=[],mn=tileLayer.options.minZoom||0,mx=tileLayer.options.maxZoom||18;
+    for(let k=0;k<=160;k++){
+      const p=at(zw,cw,zn,cn,k/160);
+      for(const tz of new Set([Math.round(p.z),Math.floor(p.z),Math.ceil(p.z)])){
+        if(tz<mn||tz>mx)continue;
+        const sc=Math.pow(2,tz-p.z),cp=map.project(p.c,tz),hw=S.x/2*sc+256,hh=S.y/2*sc+256;
+        const x0=Math.floor((cp.x-hw)/256),x1=Math.floor((cp.x+hw)/256),y0=Math.floor((cp.y-hh)/256),y1=Math.floor((cp.y+hh)/256);
+        for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){
+          const key=tz+'/'+x+'/'+y;if(seen.has(key)||y<0||y>=Math.pow(2,tz))continue;seen.add(key);
+          out.push(L.Util.template(tileLayer._url,L.extend({s:'',r:''},{x,y,z:tz})));
+        }
+      }
+    }
+    return out;
+  }
+  function preload(urls,id){
+    return new Promise(res=>{
+      let i=0,done=0,act=0;const N=urls.length;if(!N){res();return}
+      ov.style.display='block';
+      const upd=()=>{ov.innerHTML='地図を先読みしています<br>'+done+' / '+N};upd();
+      const next=()=>{
+        if(id!==demoRun){ov.style.display='none';return}
+        while(act<8&&i<N){const im=new Image();act++;im.onload=im.onerror=()=>{act--;done++;upd();if(done>=N){ov.style.display='none';res()}else next()};im.src=urls[i++]}
+      };
+      next();
+    });
+  }
+  const WIDE_C=L.latLng(34.6,134.3);
+  const wideZ=tz=>tz<8.7?Math.max(4,tz-2):7.2;
+  if(tileLayer)tileLayer.options.keepBuffer=4;
+  // ズームイン演出: 先読みしてから、もとの演出を再生
+  const _demo=demo;
+  d0.onclick=async()=>{
+    if(!lines.length)return;
+    const id=++demoRun,tz=map.getZoom(),tc=map.getCenter();
+    await preload(tileUrls(wideZ(tz),WIDE_C,tz,tc),id);
+    if(id!==demoRun)return;
+    map.setView(tc,tz,{animate:false});_demo();
+  };
+  // ズームアウト演出: いまの縮尺から、日本全体へ引いていく(経路とカードは表示したまま)
+  btn.onclick=async()=>{
+    if(!lines.length)return;
+    const id=++demoRun,tz=map.getZoom(),tc=map.getCenter(),zw=wideZ(tz);
+    await preload(tileUrls(zw,WIDE_C,tz,tc),id);
+    if(id!==demoRun)return;
+    reset();curEl.style.display='none';
+    const pn=$('panel');pn.classList.add('min');$('min').textContent='＋';
+    map.setView(tc,tz,{animate:false});
+    const b=nearestLine();if(b){highlight(b.l);showInfo(b.l._it)}
+    const T=8000;
+    setTimeout(()=>{
+      if(id!==demoRun)return;
+      const t0=performance.now();
+      const step=now=>{
+        if(id!==demoRun)return;
+        const u=Math.min(1,(now-t0)/T),p=at(zw,WIDE_C,tz,tc,1-ease(u));
+        map.setView(p.c,p.z,{animate:false});
+        if(u<1)requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    },1500); // 最初の画面(経路とカード)を少し見せる
+  };
+  // 地図に触れたら演出を止める
+  map.on('mousedown touchstart wheel',()=>{if(ov.style.display==='block'){demoRun++;ov.style.display='none'}});
+})();
+
 </script><script data-goatcounter="https://ashiato-ezu.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body></html>

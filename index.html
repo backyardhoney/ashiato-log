@@ -1613,42 +1613,36 @@ init();
   }
   map.on('move',drawBase);
   function liteOff(){baseOff();if(!window.__demoLite)return;window.__demoLite=false;try{const r=map._renderer;r._redrawBounds=null;r._clear();r._draw()}catch(e){}}
-  const WIDE_C=L.latLng(34.6,134.3);
-  const wideZ=tz=>tz<8.7?Math.max(4,tz-2):7.2;
+  // 引いた先は、日本列島全体(画面の幅に合わせて縮尺を決める)
+  const WIDE_C=L.latLng(38.0,137.7);
+  const wideZ=tz=>{const w=map.getSize().x,z=Math.log2(w*0.92*360/(16.5*256));return Math.min(Math.max(4.3,Math.min(5.6,z)),tz-1.5)};
   if(tileLayer)tileLayer.options.keepBuffer=4;
-  // ズームイン演出: 先読みしてから、もとの演出を再生
-  const _demo=demo;
-  d0.onclick=async()=>{
-    if(!lines.length)return;
-    const id=++demoRun,tz=map.getZoom(),tc=map.getCenter();
-    await preload(tileList(wideZ(tz),WIDE_C,tz,tc),id);
-    if(id!==demoRun)return;
-    map.setView(tc,tz,{animate:false});window.__demoLite=true;baseOn();_demo();
-    setTimeout(()=>{if(id===demoRun)liteOff()},1500+7000+900);
-  };
-  // ズームアウト演出: いまの縮尺から、日本全体へ引いていく(経路とカードは表示したまま)
-  btn.onclick=async()=>{
+  // 演出(ズームイン/ズームアウト): 先に地図を先読みしてから、自前のキャンバスで滑らかに動かす
+  async function run(inward){
     if(!lines.length)return;
     const id=++demoRun,tz=map.getZoom(),tc=map.getCenter(),zw=wideZ(tz);
     await preload(tileList(zw,WIDE_C,tz,tc),id);
     if(id!==demoRun)return;
     reset();curEl.style.display='none';
     const pn=$('panel');pn.classList.add('min');$('min').textContent='＋';
-    map.setView(tc,tz,{animate:false});
-    const b=nearestLine();if(b){highlight(b.l);showInfo(b.l._it)}
-    const T=8000;
+    if(inward)map.setView(WIDE_C,zw,{animate:false});
+    else{map.setView(tc,tz,{animate:false});const b=nearestLine();if(b){highlight(b.l);showInfo(b.l._it)}}
+    const T=inward?7000:8000;
     setTimeout(()=>{
       if(id!==demoRun)return;
       const t0=performance.now();window.__demoLite=true;baseOn();
       const step=now=>{
         if(id!==demoRun){liteOff();return}
-        const u=Math.min(1,(now-t0)/T),p=at(zw,WIDE_C,tz,tc,1-ease(u));
+        const u=Math.min(1,(now-t0)/T),e=ease(u),p=at(zw,WIDE_C,tz,tc,inward?e:1-e);
         map.setView(p.c,p.z,{animate:false});
-        if(u<1)requestAnimationFrame(step);else liteOff();
+        if(u<1)requestAnimationFrame(step);
+        else{liteOff();if(inward)setTimeout(()=>{if(id===demoRun)demoEnd()},700)}
       };
       requestAnimationFrame(step);
-    },1500); // 最初の画面(経路とカード)を少し見せる
-  };
+    },1500); // 最初の画面を少し見せる
+  }
+  d0.onclick=()=>run(true);
+  btn.onclick=()=>run(false);
   // 地図に触れたら演出を止める
   map.on('mousedown touchstart wheel',()=>{if(ov.style.display==='block'){demoRun++;ov.style.display='none'}});
 })();
